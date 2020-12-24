@@ -190,6 +190,7 @@ export interface IDropzoneProps {
     allFiles: IFileWithMeta[],
   ): { meta: { [name: string]: any } } | void
   getUploadParams?(file: IFileWithMeta): IUploadParams | Promise<IUploadParams>
+  customRequest?: (file: IFileWithMeta, onChangeStatus: (c: IFileWithMeta) => void, forceUpdate: () => void) => void
   onSubmit?(successFiles: IFileWithMeta[], allFiles: IFileWithMeta[]): void
 
   getFilesFromEvent?: (
@@ -351,7 +352,7 @@ class Dropzone extends React.Component<IDropzoneProps, { active: boolean; dragge
   }
 
   handleRestart = (fileWithMeta: IFileWithMeta) => {
-    if (!this.props.getUploadParams) return
+    if (!this.props.getUploadParams || !this.props.customRequest) return
 
     if (fileWithMeta.meta.status === 'ready') fileWithMeta.meta.status = 'started'
     else fileWithMeta.meta.status = 'restarted'
@@ -373,7 +374,16 @@ class Dropzone extends React.Component<IDropzoneProps, { active: boolean; dragge
 
   handleFile = async (file: File, id: string) => {
     const { name, size, type, lastModified } = file
-    const { minSizeBytes, maxSizeBytes, maxFiles, accept, getUploadParams, autoUpload, validate } = this.props
+    const {
+      minSizeBytes,
+      maxSizeBytes,
+      maxFiles,
+      accept,
+      getUploadParams,
+      customRequest,
+      autoUpload,
+      validate,
+    } = this.props
 
     const uploadedDate = new Date().toISOString()
     const lastModifiedDate = lastModified && new Date(lastModified).toISOString()
@@ -424,7 +434,7 @@ class Dropzone extends React.Component<IDropzoneProps, { active: boolean; dragge
       }
     }
 
-    if (getUploadParams) {
+    if (getUploadParams || customRequest) {
       if (autoUpload) {
         this.uploadFile(fileWithMeta)
         fileWithMeta.meta.status = 'getting_upload_params'
@@ -495,7 +505,12 @@ class Dropzone extends React.Component<IDropzoneProps, { active: boolean; dragge
   }
 
   uploadFile = async (fileWithMeta: IFileWithMeta) => {
-    const { getUploadParams } = this.props
+    const { getUploadParams, customRequest } = this.props
+    if (customRequest) {
+      this.uploadFileCustom(fileWithMeta)
+      return
+    }
+
     if (!getUploadParams) return
     let params: IUploadParams | null = null
     try {
@@ -563,6 +578,13 @@ class Dropzone extends React.Component<IDropzoneProps, { active: boolean; dragge
     this.forceUpdate()
   }
 
+  uploadFileCustom = (fileWithMeta: IFileWithMeta) => {
+    const { customRequest } = this.props
+    if (customRequest) {
+      customRequest(fileWithMeta, this.handleChangeStatus, this.forceUpdate)
+    }
+  }
+
   render() {
     const {
       accept,
@@ -572,6 +594,7 @@ class Dropzone extends React.Component<IDropzoneProps, { active: boolean; dragge
       maxSizeBytes,
       onSubmit,
       getUploadParams,
+      customRequest,
       disabled,
       canCancel,
       canRemove,
@@ -643,7 +666,7 @@ class Dropzone extends React.Component<IDropzoneProps, { active: boolean; dragge
             key={f.meta.id}
             fileWithMeta={f}
             meta={{ ...f.meta }}
-            isUpload={Boolean(getUploadParams)}
+            isUpload={Boolean(getUploadParams) || Boolean(customRequest)}
             canCancel={resolveValue(canCancel, files, extra)}
             canRemove={resolveValue(canRemove, files, extra)}
             canRestart={resolveValue(canRestart, files, extra)}
@@ -760,6 +783,7 @@ Dropzone.defaultProps = {
 Dropzone.propTypes = {
   onChangeStatus: PropTypes.func,
   getUploadParams: PropTypes.func,
+  customRequest: PropTypes.func,
   onSubmit: PropTypes.func,
 
   getFilesFromEvent: PropTypes.func,
